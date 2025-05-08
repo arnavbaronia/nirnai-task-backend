@@ -22,8 +22,18 @@ export class PdfService {
         throw new Error('No valid transactions found in the PDF');
       }
 
+      // Translate only necessary fields
       const translated = await Promise.all(
-        entries.map((e) => this.translateFields(e))
+        entries.map(async (entry) => ({
+          ...entry,
+          executants: await this.translate.translate(entry.executants),
+          claimants: await this.translate.translate(entry.claimants),
+          nature: await this.translate.translate(entry.nature),
+          propertyType: await this.translate.translate(entry.propertyType),
+          village: await this.translate.translate(entry.village),
+          street: await this.translate.translate(entry.street),
+          remarks: await this.translate.translate(entry.remarks),
+        }))
       );
 
       const result = await db.insert(transactions).values(translated).returning();
@@ -37,70 +47,89 @@ export class PdfService {
 
   private extractEntries(text: string) {
     const entries: any[] = [];
-    const lines = text.split('\n');
-    
-    // This is a simplified parser - you'll need to enhance it based on your actual PDF structure
-    let currentEntry: any = null;
-    
-    for (const line of lines) {
-      if (line.includes('விற்பனையாளர்') || line.includes('Seller')) {
-        if (currentEntry) {
-          entries.push(currentEntry);
-        }
-        currentEntry = {
-          seller: this.extractValue(line, 'விற்பனையாளர்') || this.extractValue(line, 'Seller'),
-          buyer: '',
-          houseNumber: '',
-          surveyNumber: '',
-          documentNumber: '',
-          value: '',
-          date: new Date(),
-        };
-      } else if (currentEntry) {
-        if (line.includes('கொள்முதல்') || line.includes('Buyer')) {
-          currentEntry.buyer = this.extractValue(line, 'கொள்முதல்') || this.extractValue(line, 'Buyer');
-        } else if (line.includes('வீடு எண்') || line.includes('House No')) {
-          currentEntry.houseNumber = this.extractValue(line, 'வீடு எண்') || this.extractValue(line, 'House No');
-        } else if (line.includes('அளவீடு எண்') || line.includes('Survey No')) {
-          currentEntry.surveyNumber = this.extractValue(line, 'அளவீடு எண்') || this.extractValue(line, 'Survey No');
-        } else if (line.includes('ஆவணம் எண்') || line.includes('Document No')) {
-          currentEntry.documentNumber = this.extractValue(line, 'ஆவணம் எண்') || this.extractValue(line, 'Document No');
-        } else if (line.includes('மதிப்பு') || line.includes('Value')) {
-          currentEntry.value = this.extractValue(line, 'மதிப்பு') || this.extractValue(line, 'Value');
-        }
-      }
-    }
+    const sections = text.split(/(?=\nSr\. No\.|வ\. எண்)/g).filter(Boolean);
 
-    if (currentEntry) {
-      entries.push(currentEntry);
+    for (const section of sections) {
+      if (!section.trim()) continue;
+
+      const entry: any = {
+        serialNumber: this.extractValue(section, 'Sr\. No\.|வ\. எண்'),
+        documentNumber: this.extractValue(section, 'Document No\.|ஆவண எண்'),
+        documentYear: this.extractValue(section, 'Year|ஆண்டு'),
+        executionDate: this.extractDate(section, 'Date of Execution|எழுதிக் கொடுத்த நாள்'),
+        presentationDate: this.extractDate(section, 'Date of Presentation|தாக்கல் நாள்'),
+        registrationDate: this.extractDate(section, 'Date of Registration|பதிவு நாள்'),
+        nature: this.extractValue(section, 'Nature|தன்மை'),
+        executants: this.extractNames(section, 'Name of Executant|எழுதிக் கொடுத்தவர்'),
+        claimants: this.extractNames(section, 'Name of Claimant|எழுதி வாங்கியவர்'),
+        volumeNumber: this.extractValue(section, 'Vol\.No|தொகுதி எண்'),
+        pageNumber: this.extractValue(section, 'Page\. No|பக்க எண்'),
+        considerationValue: this.extractMoney(section, 'Consideration Value|கைமாற்றுத் தொகை'),
+        marketValue: this.extractMoney(section, 'Market Value|சந்தை மதிப்பு'),
+        prNumber: this.extractValue(section, 'PR Number|முந்தய ஆவண எண்'),
+        propertyType: this.extractValue(section, 'Property Type|சொத்தின் வகைப்பாடு'),
+        propertyExtent: this.extractValue(section, 'Property Extent|சொத்தின் விஸ்தரணம்'),
+        village: this.extractValue(section, 'Village|கிராமம்'),
+        street: this.extractValue(section, 'Street|தெரு'),
+        surveyNumbers: this.extractValue(section, 'Survey No\.|புல எண்'),
+        plotNumber: this.extractValue(section, 'Plot No\.|மனை எண்'),
+        remarks: this.extractRemarks(section),
+      };
+
+      // Clean up extracted values
+      Object.keys(entry).forEach(key => {
+        if (typeof entry[key] === 'string') {
+          entry[key] = entry[key].trim();
+          if (entry[key] === '') entry[key] = null;
+        }
+      });
+
+      entries.push(entry);
     }
 
     return entries;
   }
 
-  private extractValue(line: string, keyword: string): string {
-    const parts = line.split(keyword);
-    if (parts.length > 1) {
-      return parts[1].trim().split(/\s+/)[0];
-    }
-    return '';
+  private extractValue(text: string, patterns: string): string {
+    const regex = new RegExp(`(${patterns}).*?[:\\s]*(.*?)(\\n|$)`, 'i');
+    const match = text.match(regex);
+    return match ? match[2].trim() : '';
   }
 
-  private async translateFields(entry: any) {
-    try {
-      const [buyer, seller] = await Promise.all([
-        this.translate.translate(entry.buyer),
-        this.translate.translate(entry.seller),
-      ]);
-
-      return {
-        ...entry,
-        buyer,
-        seller,
-      };
-    } catch (error) {
-      console.error('Translation error:', error);
-      return entry; // Return untranslated if translation fails
+  private extractDate(text: string, patterns: string): Date | null {
+    const value = this.extractValue(text, patterns);
+    if (!value) return null;
+    
+    // Handle dates like "06-Feb-2013"
+    const dateMatch = value.match(/(\d{2})-([a-zA-Z]{3})-(\d{4})/);
+    if (dateMatch) {
+      return new Date(`${dateMatch[2]} ${dateMatch[1]}, ${dateMatch[3]}`);
     }
+    return null;
+  }
+
+  private extractNames(text: string, patterns: string): string {
+    const regex = new RegExp(`(${patterns}).*?[\\s\\n]*([\\s\\S]*?)(?=\\n\\s*\\n|$)`, 'i');
+    const match = text.match(regex);
+    if (!match) return '';
+
+    // Clean up names list
+    return match[2]
+      .split('\n')
+      .map(line => line.replace(/^\d+\.\s*/, '').trim())
+      .filter(Boolean)
+      .join(', ');
+  }
+
+  private extractMoney(text: string, patterns: string): string {
+    const value = this.extractValue(text, patterns);
+    const amountMatch = value.match(/[\d,]+/);
+    return amountMatch ? amountMatch[0].replace(/,/g, '') : '';
+  }
+
+  private extractRemarks(text: string): string {
+    const remarksRegex = /(Document Remarks|ஆவணக் குறிப்புகள்|Schedule Remarks|சொத்து விவரம் தொடர்பான குறிப்புரை)[:\s]*([\s\S]*?)(?=\n\s*\n|$)/i;
+    const match = text.match(remarksRegex);
+    return match ? match[2].trim() : '';
   }
 }

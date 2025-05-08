@@ -25,9 +25,14 @@ export class PdfController {
     }
 
     try {
-      return await this.pdfService.processPDF(file);
+      const result = await this.pdfService.processPDF(file);
+      return {
+        success: true,
+        count: result.length,
+        data: result
+      };
     } catch (error) {
-      throw error; // Let the global exception filter handle it
+      throw error;
     }
   }
 }
