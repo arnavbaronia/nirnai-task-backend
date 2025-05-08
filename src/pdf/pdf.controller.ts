@@ -28,7 +28,7 @@ export class PdfController {
       const result = await this.pdfService.processPDF(file);
       return {
         success: true,
-        count: result.length,
+        count: result.data.length,
         data: result
       };
     } catch (error) {

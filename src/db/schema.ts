@@ -9,8 +9,8 @@ export const transactions = pgTable('transactions', {
   presentationDate: timestamp('presentation_date'),
   registrationDate: timestamp('registration_date'),
   nature: text('nature'),
-  executants: text('executants'), // sellers
-  claimants: text('claimants'), // buyers
+  executants: text('executants'),
+  claimants: text('claimants'),
   volumeNumber: text('volume_number'),
   pageNumber: text('page_number'),
   considerationValue: numeric('consideration_value', { precision: 15, scale: 2 }),
@@ -25,3 +25,11 @@ export const transactions = pgTable('transactions', {
   remarks: text('remarks'),
   createdAt: timestamp('created_at').defaultNow(),
 });
+
+// Add indexes for better search performance
+export const transactionsIndices = [
+  transactions.executants,
+  transactions.claimants,
+  transactions.surveyNumbers,
+  transactions.documentNumber
+];
