@@ -4,6 +4,8 @@ import { db } from '../db/drizzle';
 import { transactions } from '../db/schema';
 import { TranslateService } from '../utils/translate.service';
 import { File } from 'multer';
+import { and, ilike, eq } from 'drizzle-orm';
+import { SearchTransactionsDto } from './dto/search-transactions.dto';
 
 @Injectable()
 export class PdfService {
@@ -67,6 +69,26 @@ export class PdfService {
       plotNumber: safeMatch('Plot No\\.[\\s:]*(\\d+)'),
       remarks: this.extractRemarks(block)
     };
+  }
+
+  async searchTransactions(filters: SearchTransactionsDto) {
+    try {
+      const { buyer, seller, houseNumber, surveyNumber, documentNumber } = filters;
+      
+      const query = db.select()
+        .from(transactions)
+        .where(and(
+          buyer ? ilike(transactions.claimants, `%${buyer}%`) : undefined,
+          seller ? ilike(transactions.executants, `%${seller}%`) : undefined,
+          houseNumber ? eq(transactions.plotNumber, houseNumber) : undefined,
+          surveyNumber ? ilike(transactions.surveyNumbers, `%${surveyNumber}%`) : undefined,
+          documentNumber ? ilike(transactions.documentNumber, `%${documentNumber}%`) : undefined
+        ));
+
+      return await query;
+    } catch (error) {
+      throw new Error(`Search failed: ${error.message}`);
+    }
   }
 
   private extractDate(block: string, field: string): Date | null {

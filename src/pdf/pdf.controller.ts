@@ -1,6 +1,8 @@
 import {
   Controller,
   Post,
+  Get,
+  Query,
   UploadedFile,
   UseInterceptors,
   BadRequestException,
@@ -8,6 +10,7 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import { PdfService } from './pdf.service';
 import { File } from 'multer';
+import { SearchTransactionsDto } from './dto/search-transactions.dto';
 
 @Controller('pdf')
 export class PdfController {
@@ -33,6 +36,17 @@ export class PdfController {
       };
     } catch (error) {
       throw error;
+    }
+  }
+
+  @Get('search')
+  async searchTransactions(
+    @Query() searchParams: SearchTransactionsDto
+  ) {
+    try {
+      return await this.pdfService.searchTransactions(searchParams);
+    } catch (error) {
+      throw new BadRequestException(error.message);
     }
   }
 }
