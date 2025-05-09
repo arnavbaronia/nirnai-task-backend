@@ -11,8 +11,11 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { PdfService } from './pdf.service';
 import { File } from 'multer';
 import { SearchTransactionsDto } from './dto/search-transactions.dto';
+import { UseGuards } from '@nestjs/common';
+import { JwtAuthGuard } from '../auth/strategies/jwt.strategy';
 
 @Controller('pdf')
+@UseGuards(JwtAuthGuard)
 export class PdfController {
   constructor(private pdfService: PdfService) {}
 
