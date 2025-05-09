@@ -6,13 +6,13 @@ import {
   UploadedFile,
   UseInterceptors,
   BadRequestException,
+  UseGuards,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { PdfService } from './pdf.service';
 import { File } from 'multer';
 import { SearchTransactionsDto } from './dto/search-transactions.dto';
-import { UseGuards } from '@nestjs/common';
-import { JwtAuthGuard } from '../auth/strategies/jwt.strategy';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 @Controller('pdf')
 @UseGuards(JwtAuthGuard)
