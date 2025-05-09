@@ -10,9 +10,9 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { PdfService } from './pdf.service';
-import { File } from 'multer';
 import { SearchTransactionsDto } from './dto/search-transactions.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import * as multer from 'multer';  // Import multer
 
 @Controller('pdf')
 @UseGuards(JwtAuthGuard)
@@ -21,25 +21,16 @@ export class PdfController {
 
   @Post('upload')
   @UseInterceptors(FileInterceptor('file'))
-  async handleUpload(@UploadedFile() file: File) {
+  async handleUpload(@UploadedFile() file: multer.File) {  // Update type here
     if (!file) {
       throw new BadRequestException('No file uploaded');
     }
 
-    if (file.mimetype !== 'application/pdf') {
-      throw new BadRequestException('Only PDF files are allowed');
+    if (file.size > 50 * 1024 * 1024) {
+      throw new BadRequestException('File size exceeds 50MB limit');
     }
 
-    try {
-      const result = await this.pdfService.processPDF(file);
-      return {
-        success: true,
-        count: result.data.length,
-        data: result
-      };
-    } catch (error) {
-      throw error;
-    }
+    return this.pdfService.processPDF(file);
   }
 
   @Get('search')
