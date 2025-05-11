@@ -4,7 +4,6 @@ import * as bcrypt from 'bcrypt';
 import { db } from '../db/drizzle';
 import { users } from './entities/user.entity';
 import { eq } from 'drizzle-orm';
-import { RegisterDto } from './dto/register.dto';
 
 @Injectable()
 export class AuthService {
@@ -14,26 +13,25 @@ export class AuthService {
     const user = await db.select().from(users).where(eq(users.email, email)).limit(1);
     if (user.length === 0) return null;
 
-    console.log('Login payload:', { email, password });
-    console.log('DB result:', user[0]);
-
     const isValid = await bcrypt.compare(password, user[0].password_hash);
-    console.log('Password valid?', isValid);
-
     if (!isValid) return null;
 
     const { password_hash, ...result } = user[0];
     return result;
   }
 
-  async login(user: any) {
+  async login(loginDto: { email: string; password: string }) {
+    const user = await this.validateUser(loginDto.email, loginDto.password);
+    if (!user) throw new Error('Invalid credentials');
+
     const payload = { email: user.email, sub: user.id };
     return {
       access_token: this.jwtService.sign(payload),
+      user
     };
   }
 
-  async register(registerDto: RegisterDto) {
+  async register(registerDto: { email: string; password: string }) {
     const salt = await bcrypt.genSalt();
     const hash = await bcrypt.hash(registerDto.password, salt);
 
@@ -44,7 +42,6 @@ export class AuthService {
         password_hash: hash,
       })
       .returning();
-    console.log('Stored hash:', user.password_hash);
 
     const { password_hash, ...result } = user;
     return result;
