@@ -1,44 +1,58 @@
-import { Controller, Post, Body, Res } from '@nestjs/common';
+import { Controller, Post, Body, Res, Get, Req, UseGuards } from '@nestjs/common';
 import { AuthService } from './auth.service';
-import { Response } from 'express';
+import { Response, Request } from 'express';
+import { JwtAuthGuard } from './guards/jwt-auth.guard';
 
-@Controller()
+@Controller('auth')
 export class AuthController {
   constructor(private authService: AuthService) {}
 
+  // auth.controller.ts
   @Post('login')
   async login(
     @Body() body: { email: string; password: string },
     @Res({ passthrough: true }) res: Response
   ) {
-    const { access_token } = await this.authService.login({
+    const result = await this.authService.login({
       email: body.email,
       password: body.password
     });
     
-    res.cookie('token', access_token, {
+    // Set cookie with proper attributes
+    res.cookie('token', result.access_token, {
       httpOnly: true,
-      secure: false, // Set to true in production with HTTPS
+      secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
       maxAge: 3600000, // 1 hour
-      domain: 'localhost',
       path: '/',
+      domain: process.env.NODE_ENV === 'production' ? 'yourdomain.com' : undefined
     });
     
-    return { success: true };
+    return { 
+      success: true,
+      user: result.user
+    };
   }
-  
+
   @Post('register')
   async register(@Body() body: { email: string; password: string }) {
-    return this.authService.register({ 
+    const user = await this.authService.register({ 
       email: body.email, 
       password: body.password 
     });
+    return { success: true, user };
   }
 
+  @UseGuards(JwtAuthGuard)
   @Post('logout')
   async logout(@Res({ passthrough: true }) res: Response) {
     res.clearCookie('token');
-    return { message: 'Logged out successfully' };
+    return { success: true };
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get('profile')
+  async getProfile(@Req() req: Request) {
+    return { success: true, user: req.user };
   }
 }
